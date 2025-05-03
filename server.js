@@ -45,7 +45,7 @@ app.post('/generate', async (req, res) => {
     const prompt = buildPrompt(type, text, userInstruction);
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-1106-preview', // Equivalente a GPT-4.1 Mini
+      model: 'gpt-4.1-mini',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7
     });
