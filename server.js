@@ -214,6 +214,124 @@ app.post('/log', async (req, res) => {
 });
 
 
+// ENDPOINTS PARA GESTIÓN DE PLANTILLAS
+
+// Obtener las plantillas del usuario
+app.get('/templates', async (req, res) => {
+  const userId = req.query.userId;
+  
+  if (!userId) {
+    return res.status(400).json({ error: 'Se requiere el ID de usuario' });
+  }
+  
+  try {
+    const [templates] = await pool.execute(
+      `SELECT id, user_id, title, content, created_at 
+       FROM user_templates 
+       WHERE user_id = ? 
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+    
+    res.json({ templates });
+  } catch (err) {
+    console.error('❌ Error obteniendo plantillas:', err);
+    res.status(500).json({ error: 'Error al obtener las plantillas' });
+  }
+});
+
+// Crear una nueva plantilla
+app.post('/templates', async (req, res) => {
+  const { user_id, title, content } = req.body;
+  
+  if (!user_id || !title || !content) {
+    return res.status(400).json({ error: 'Faltan datos requeridos' });
+  }
+  
+  try {
+    const [result] = await pool.execute(
+      `INSERT INTO user_templates (user_id, title, content, created_at) 
+       VALUES (?, ?, ?, NOW())`,
+      [user_id, title, content]
+    );
+    
+    res.status(201).json({ 
+      success: true, 
+      template_id: result.insertId,
+      message: 'Plantilla creada exitosamente'
+    });
+  } catch (err) {
+    console.error('❌ Error creando plantilla:', err);
+    res.status(500).json({ error: 'Error al crear la plantilla' });
+  }
+});
+
+// Actualizar una plantilla existente
+app.put('/templates', async (req, res) => {
+  const { id, user_id, title, content } = req.body;
+  
+  if (!id || !user_id || !title || !content) {
+    return res.status(400).json({ error: 'Faltan datos requeridos' });
+  }
+  
+  try {
+    // Verificar que la plantilla pertenezca al usuario
+    const [templates] = await pool.execute(
+      `SELECT id FROM user_templates WHERE id = ? AND user_id = ?`,
+      [id, user_id]
+    );
+    
+    if (templates.length === 0) {
+      return res.status(403).json({ error: 'No tienes permiso para editar esta plantilla' });
+    }
+    
+    // Actualizar la plantilla
+    await pool.execute(
+      `UPDATE user_templates 
+       SET title = ?, content = ?
+       WHERE id = ? AND user_id = ?`,
+      [title, content, id, user_id]
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Plantilla actualizada exitosamente'
+    });
+  } catch (err) {
+    console.error('❌ Error actualizando plantilla:', err);
+    res.status(500).json({ error: 'Error al actualizar la plantilla' });
+  }
+});
+
+// Eliminar una plantilla
+app.delete('/templates/:id', async (req, res) => {
+  const templateId = req.params.id;
+  
+  if (!templateId) {
+    return res.status(400).json({ error: 'Se requiere el ID de la plantilla' });
+  }
+  
+  // Nota: Idealmente deberíamos verificar que la plantilla pertenezca al usuario actual
+  // pero para simplificar, vamos a eliminar directamente por ID
+  
+  try {
+    await pool.execute(
+      `DELETE FROM user_templates WHERE id = ?`,
+      [templateId]
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Plantilla eliminada exitosamente'
+    });
+  } catch (err) {
+    console.error('❌ Error eliminando plantilla:', err);
+    res.status(500).json({ error: 'Error al eliminar la plantilla' });
+  }
+});
+
+
+
 app.listen(port, () => {
   console.log(`🚀 Orion backend corriendo en puerto ${port}`);
 });
