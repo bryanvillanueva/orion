@@ -6,6 +6,9 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const { OpenAI } = require('openai');
 const rateLimit = require('express-rate-limit');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const session = require('cookie-session');
 
 require('dotenv').config();
 
