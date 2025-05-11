@@ -148,7 +148,6 @@ app.get('/auth/google/callback',
   async (req, res) => {
     const { id, email, name } = req.user;
     try {
-      // Upsert en tabla users
       await pool.execute(
         `INSERT INTO users (id, email, created_at, last_login)
          VALUES (?, ?, NOW(), NOW())
@@ -158,10 +157,23 @@ app.get('/auth/google/callback',
     } catch (dbErr) {
       console.error('Error guardando user en DB:', dbErr);
     }
-    // Finalmente devuelve JSON al cliente
-    res.json({ success: true, user: req.user });
+
+    // Enviar HTML con cierre automático
+    res.send(`
+      <html>
+        <body style="font-family: Poppins, sans-serif; text-align: center; margin-top: 40px;">
+          <script>
+            window.opener && window.opener.postMessage({ type: 'orion-auth-success' }, '*');
+            window.close();
+          </script>
+          <p>Autenticación completada, puedes cerrar esta ventana.</p>
+        </body>
+      </html>
+    `);
   }
 );
+
+
 
 // Probar si el usuario está logueado
 app.get('/me', (req, res) => {
