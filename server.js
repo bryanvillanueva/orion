@@ -11,9 +11,26 @@ require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use(cors());
 app.use(bodyParser.json());
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((user, done) => done(null, user));
+
+passport.use(new GoogleStrategy({
+  clientID: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL: process.env.CALLBACK_URL
+}, (accessToken, refreshToken, profile, done) => {
+  return done(null, {
+    id: profile.id,
+    email: profile.emails[0].value,
+    name: profile.displayName
+  });
+}));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -150,6 +167,27 @@ app.post('/generate', async (req, res) => {
     }
   }
 });
+
+// Ruta de login
+app.get('/auth/google', passport.authenticate('google', {
+  scope: ['profile', 'email']
+}));
+
+// Ruta de callback
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/' }),
+  (req, res) => {
+    // Puedes devolver un JWT o redirigir con el user en sesión
+    res.json({ success: true, user: req.user });
+  }
+);
+
+// Ruta de prueba
+app.get('/me', (req, res) => {
+  if (req.user) res.json(req.user);
+  else res.status(401).json({ error: 'No autenticado' });
+});
+
 
 app.listen(port, () => {
   console.log(`🚀 Orion backend corriendo en puerto ${port}`);
