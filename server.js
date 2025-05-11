@@ -10,6 +10,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session); // <-- añadido
 require('dotenv').config();
+const mysql = require('mysql2/promise');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,6 +24,16 @@ const dbOptions = {
   database: process.env.DB_NAME
 };
 const sessionStore = new MySQLStore(dbOptions); // <-- añadido
+
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
 
 // Configurar Express
 app.set('trust proxy', 1);
@@ -134,7 +145,20 @@ app.get('/auth/google', passport.authenticate('google', {
 
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => {
+  async (req, res) => {
+    const { id, email, name } = req.user;
+    try {
+      // Upsert en tabla users
+      await pool.execute(
+        `INSERT INTO users (id, email, created_at, last_login)
+         VALUES (?, ?, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE email = VALUES(email), last_login = NOW()`,
+        [id, email]
+      );
+    } catch (dbErr) {
+      console.error('Error guardando user en DB:', dbErr);
+    }
+    // Finalmente devuelve JSON al cliente
     res.json({ success: true, user: req.user });
   }
 );
@@ -144,6 +168,17 @@ app.get('/me', (req, res) => {
   if (req.user) res.json(req.user);
   else res.status(401).json({ error: 'No autenticado' });
 });
+
+// Logout
+app.post('/logout', (req, res) => {
+  req.logout(() => {
+    req.session.destroy(err => {
+      res.clearCookie('orion.sid');
+      res.json({ success: true });
+    });
+  });
+});
+
 
 app.listen(port, () => {
   console.log(`🚀 Orion backend corriendo en puerto ${port}`);
