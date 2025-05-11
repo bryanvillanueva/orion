@@ -10,12 +10,22 @@ require('dotenv').config();
 
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const session = require('cookie-session');
+const session = require('express-session');
 
 
+app.set('trust proxy', 1);
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'clave_segura',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false } // Usa true si usas HTTPS y proxy
+}));
+
+
 app.use(passport.initialize());
 app.use(passport.session());
 
