@@ -13,10 +13,11 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 
 
-app.set('trust proxy', 1);
+
 
 const app = express();
 const port = process.env.PORT || 3000;
+app.set('trust proxy', 1);
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'clave_segura',
