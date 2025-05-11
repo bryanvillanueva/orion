@@ -51,21 +51,8 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
-app.use(cors({
-  origin: (origin, callback) => {
-    // Aceptar peticiones desde tu extensión y tu frontend
-    const allowedOrigins = [
-      'chrome-extension://odeehmjogoiahlcpgbhpbkpgcpjcgdik',
-      'https://orion.bryanglen.com' // 
-    ];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS no permitido para este origen'));
-    }
-  },
-  credentials: true
-}));
+
+app.use(cors());
 app.use(bodyParser.json());
 
 // Configurar OpenAI
