@@ -194,24 +194,25 @@ app.post('/logout', (req, res) => {
 
 
 app.post('/log', async (req, res) => {
-  if (!req.user || !req.user.id) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
+  const { user_id, action, input_text, output_text, source_url } = req.body;
 
-  const { action, input_text, output_text, source_url } = req.body;
+  if (!user_id) {
+    return res.status(401).json({ error: 'Usuario no autenticado' });
+  }
 
   try {
     await pool.execute(
       `INSERT INTO user_activity_logs (user_id, action_type, input_text, output_text, source_url, created_at)
        VALUES (?, ?, ?, ?, ?, NOW())`,
-      [req.user.id, action, input_text, output_text, source_url]
+      [user_id, action, input_text, output_text, source_url]
     );
     res.json({ success: true });
   } catch (err) {
-    console.error('Error al guardar log:', err);
+    console.error('❌ Error al guardar log:', err);
     res.status(500).json({ error: 'Error al guardar log' });
   }
 });
+
 
 app.listen(port, () => {
   console.log(`🚀 Orion backend corriendo en puerto ${port}`);
