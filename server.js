@@ -60,7 +60,23 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Configurar Passport con Google
 passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((user, done) => done(null, user));
+passport.deserializeUser(async (user, done) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT u.*, o.full_name, o.username, o.email_contact
+       FROM users u
+       LEFT JOIN orion_users o ON u.orion_user_id = o.id
+       WHERE u.id = ? LIMIT 1`,
+      [user.id]
+    );
+
+    if (rows.length === 0) return done(null, false);
+    return done(null, rows[0]);
+  } catch (err) {
+    console.error("❌ Error en deserializeUser:", err);
+    return done(err, null);
+  }
+});
 
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
