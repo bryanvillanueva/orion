@@ -52,7 +52,10 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(bodyParser.json());
 
 // Configurar OpenAI
