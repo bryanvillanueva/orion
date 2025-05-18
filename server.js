@@ -147,32 +147,117 @@ app.get('/auth/google', passport.authenticate('google', {
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   async (req, res) => {
-    const { id, email, name } = req.user;
     try {
-      await pool.execute(
-        `INSERT INTO users (id, email, created_at, last_login)
-         VALUES (?, ?, NOW(), NOW())
-         ON DUPLICATE KEY UPDATE email = VALUES(email), last_login = NOW()`,
-        [id, email]
-      );
-    } catch (dbErr) {
-      console.error('Error guardando user en DB:', dbErr);
-    }
+      const googleId = req.user.id;
+      const email = req.user.email;
+      const name = req.user.name;
 
-    // Enviar HTML con cierre automático
-    res.send(`
-      <html>
-        <body style="font-family: Poppins, sans-serif; text-align: center; margin-top: 40px;">
-          <script>
-            window.opener && window.opener.postMessage({ type: 'orion-auth-success' }, '*');
-            window.close();
-          </script>
-          <p>Autenticación completada, puedes cerrar esta ventana.</p>
-        </body>
-      </html>
-    `);
+      // Buscar si la cuenta ya está registrada
+      const [userRows] = await pool.execute(
+        `SELECT * FROM users WHERE id = ? LIMIT 1`,
+        [googleId]
+      );
+
+      let orionUserId = null;
+
+      if (userRows.length === 0) {
+        // Registrar nueva cuenta de acceso (sin orion_user_id aún)
+        await pool.execute(
+          `INSERT INTO users (id, email, created_at, last_login)
+           VALUES (?, ?, NOW(), NOW())`,
+          [googleId, email]
+        );
+      } else {
+        // Si ya existe, obtener el orion_user_id y actualizar login
+        orionUserId = userRows[0].orion_user_id;
+        await pool.execute(
+          `UPDATE users SET last_login = NOW() WHERE id = ?`,
+          [googleId]
+        );
+      }
+
+      // Armar objeto de respuesta
+      const userObject = {
+        id: googleId,
+        email,
+        name,
+        orion_user_id: orionUserId || null
+      };
+
+      const needsSetup = !orionUserId;
+
+      // Enviar los datos al frontend (popup.html) usando postMessage
+      res.send(`
+        <html>
+          <body style="font-family: Poppins, sans-serif; text-align: center; margin-top: 40px;">
+            <script>
+              const user = ${JSON.stringify(userObject)};
+              const needsSetup = ${JSON.stringify(needsSetup)};
+              
+              if (window.opener) {
+                window.opener.postMessage({ type: 'orion-auth-success', user, needsSetup }, '*');
+                window.close();
+              } else {
+                document.body.innerHTML = '<p>No se pudo completar la autenticación.</p>';
+              }
+            </script>
+            <p>Autenticación completada, puedes cerrar esta ventana.</p>
+          </body>
+        </html>
+      `);
+    } catch (err) {
+      console.error("❌ Error en /auth/google/callback:", err);
+      res.status(500).send("Error al autenticar usuario.");
+    }
   }
 );
+
+// Endpoint para configurar el usuario
+app.post('/user/setup', async (req, res) => {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ error: 'No autenticado' });
+  }
+
+  const { full_name, username, email_contact } = req.body;
+
+  if (!full_name || !username || !email_contact) {
+    return res.status(400).json({ error: 'Todos los campos son requeridos.' });
+  }
+
+  try {
+    // 1. Insertar en orion_users
+    const [result] = await pool.execute(
+      `INSERT INTO orion_users (full_name, username, email_contact)
+       VALUES (?, ?, ?)`,
+      [full_name, username, email_contact]
+    );
+
+    const orionUserId = result.insertId;
+
+    // 2. Asociar este orion_user al usuario actual (cuenta Gmail)
+    await pool.execute(
+      `UPDATE users SET orion_user_id = ? WHERE id = ?`,
+      [orionUserId, req.user.id]
+    );
+
+    // 3. Devolver el usuario actualizado al frontend
+    res.json({
+      success: true,
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        orion_user_id: orionUserId,
+        full_name,
+        username,
+        email_contact
+      }
+    });
+  } catch (err) {
+    console.error('❌ Error en /user/setup:', err);
+    res.status(500).json({ error: 'Error interno al registrar el usuario' });
+  }
+});
 
 
 
