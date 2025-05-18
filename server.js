@@ -363,6 +363,8 @@ app.get('/templates', async (req, res) => {
 
 // Crear una nueva plantilla
 app.post('/templates', async (req, res) => {
+  console.log('📌 Sesión:', req.session);
+  console.log('📌 Usuario:', req.user);
   if (!req.user || !req.user.orion_user_id) {
     return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
   }
