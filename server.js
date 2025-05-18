@@ -62,6 +62,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser(async (user, done) => {
   try {
+    console.log("🔍 Deserializando usuario:", user); // 👈 esto es importante
+
     const [rows] = await pool.execute(
       `SELECT u.*, o.full_name, o.username, o.email_contact
        FROM users u
@@ -70,13 +72,19 @@ passport.deserializeUser(async (user, done) => {
       [user.id]
     );
 
-    if (rows.length === 0) return done(null, false);
+    if (rows.length === 0) {
+      console.log("⚠️ No se encontró el usuario en la base de datos.");
+      return done(null, false);
+    }
+
+    console.log("✅ Usuario deserializado:", rows[0]);
     return done(null, rows[0]);
   } catch (err) {
     console.error("❌ Error en deserializeUser:", err);
     return done(err, null);
   }
 });
+
 
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
