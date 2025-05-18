@@ -225,7 +225,19 @@ app.post('/user/setup', async (req, res) => {
   }
 
   try {
-    // 1. Insertar en orion_users
+    // Verificar si este usuario ya está vinculado a un orion_user
+    const [existing] = await pool.execute(
+      'SELECT orion_user_id FROM users WHERE id = ? LIMIT 1',
+      [req.user.id]
+    );
+
+    if (existing.length > 0 && existing[0].orion_user_id) {
+      return res.status(400).json({
+        error: 'Este usuario ya está vinculado a un perfil de Orion.'
+      });
+    }
+
+    // Crear nuevo orion_user
     const [result] = await pool.execute(
       `INSERT INTO orion_users (full_name, username, email_contact)
        VALUES (?, ?, ?)`,
@@ -234,13 +246,13 @@ app.post('/user/setup', async (req, res) => {
 
     const orionUserId = result.insertId;
 
-    // 2. Asociar este orion_user al usuario actual (cuenta Gmail)
+    // Asociar ese orion_user al usuario de Gmail
     await pool.execute(
       `UPDATE users SET orion_user_id = ? WHERE id = ?`,
       [orionUserId, req.user.id]
     );
 
-    // 3. Devolver el usuario actualizado al frontend
+    // Devolver información al frontend
     res.json({
       success: true,
       user: {
@@ -255,9 +267,10 @@ app.post('/user/setup', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error en /user/setup:', err);
-    res.status(500).json({ error: 'Error interno al registrar el usuario' });
+    res.status(500).json({ error: 'Error interno al registrar el perfil' });
   }
 });
+
 
 
 
