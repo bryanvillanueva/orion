@@ -438,9 +438,9 @@ app.get('/templates', async (req, res) => {
 
   try {
     const [templates] = await pool.execute(
-      `SELECT id, user_id, title, content, created_at 
+      `SELECT id, orion_user_id, title, content, created_at 
        FROM user_templates 
-       WHERE user_id = ? 
+       WHERE orion_user_id = ? 
        ORDER BY created_at DESC`,
       [req.user.orion_user_id]
     );
@@ -472,7 +472,7 @@ app.post('/templates', async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      `INSERT INTO user_templates (user_id, title, content, created_at) 
+      `INSERT INTO user_templates (orion_user_id, title, content, created_at) 
        VALUES (?, ?, ?, NOW())`,
       [req.user.orion_user_id, title, content]
     );
@@ -505,7 +505,7 @@ app.put('/templates', async (req, res) => {
   try {
     // Verificar que la plantilla pertenezca al usuario autenticado
     const [templates] = await pool.execute(
-      `SELECT id FROM user_templates WHERE id = ? AND user_id = ?`,
+      `SELECT id FROM user_templates WHERE id = ? AND orion_user_id = ?`,
       [id, req.user.orion_user_id]
     );
 
@@ -517,7 +517,7 @@ app.put('/templates', async (req, res) => {
     await pool.execute(
       `UPDATE user_templates 
        SET title = ?, content = ?
-       WHERE id = ? AND user_id = ?`,
+       WHERE id = ? AND orion_user_id = ?`,
       [title, content, id, req.user.orion_user_id]
     );
 
@@ -542,7 +542,7 @@ app.delete('/templates/:id', async (req, res) => {
 
   try {
     const [templates] = await pool.execute(
-      `SELECT id FROM user_templates WHERE id = ? AND user_id = ?`,
+      `SELECT id FROM user_templates WHERE id = ? AND orion_user_id = ?`,
       [templateId, req.user.orion_user_id]
     );
 
