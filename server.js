@@ -64,11 +64,13 @@ app.use(bodyParser.json());
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Configurar Passport con Google
-passport.serializeUser((user, done) => done(null, user));
-
+passport.serializeUser((user, done) => {
+  console.log('📝 SERIALIZANDO usuario:', user);
+  done(null, user);
+});
 passport.deserializeUser(async (user, done) => {
   try {
-    console.log("🔍 Deserializando usuario:", user);
+    console.log("🔍 DESERIALIZANDO usuario recibido:", user);
 
     const [rows] = await pool.execute(
       `SELECT u.id, u.email, u.orion_user_id, u.created_at, u.last_login,
@@ -78,6 +80,8 @@ passport.deserializeUser(async (user, done) => {
        WHERE u.id = ? LIMIT 1`,
       [user.id]
     );
+
+    console.log("🔍 RESULTADO de la query:", rows);
 
     if (rows.length === 0) {
       console.log("⚠️ No se encontró el usuario en la base de datos.");
@@ -89,7 +93,7 @@ passport.deserializeUser(async (user, done) => {
       name: user.name // Mantener el nombre de Google
     };
 
-    console.log("✅ Usuario deserializado:", userData);
+    console.log("✅ Usuario deserializado exitosamente:", userData);
     return done(null, userData);
   } catch (err) {
     console.error("❌ Error en deserializeUser:", err);
@@ -97,6 +101,15 @@ passport.deserializeUser(async (user, done) => {
   }
 });
 
+app.get('/debug-session', (req, res) => {
+  res.json({
+    isAuthenticated: req.isAuthenticated(),
+    sessionID: req.sessionID,
+    session: req.session,
+    user: req.user,
+    passport: req.session?.passport
+  });
+});
 
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
@@ -183,6 +196,8 @@ app.get('/auth/google', passport.authenticate('google', {
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   async (req, res) => {
+    console.log('🔍 CALLBACK - req.user inicial:', req.user);
+    console.log('🔍 CALLBACK - req.session antes:', req.session);
     try {
       const googleId = req.user.id;
       const email = req.user.email;
@@ -221,6 +236,9 @@ app.get('/auth/google/callback',
       };
 
       const needsSetup = !orionUserId;
+
+      console.log('🔍 CALLBACK - userObject final:', userObject);
+      console.log('🔍 CALLBACK - req.session después:', req.session);
 
       // Enviar los datos al frontend (popup.html) usando postMessage
       res.send(`
