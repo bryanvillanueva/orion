@@ -425,26 +425,21 @@ app.options('/templates/:id', (req, res) => {
 
 // Obtener las plantillas del usuario
 app.get('/templates', async (req, res) => {
-  console.log('🔍 Headers recibidos:', req.headers);
-  console.log('🔍 Cookie header:', req.headers.cookie);
-  console.log('🔍 Origin:', req.headers.origin);
-  console.log('🔍 User-Agent:', req.headers['user-agent']);
-  console.log('🔍 GET /templates - req.user:', req.user);
-  console.log('🔍 GET /templates - session:', req.session);
+  const { userId } = req.query;
   
-  if (!req.user || !req.user.orion_user_id) {
-    return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: 'userId válido requerido' });
   }
-
+  
   try {
     const [templates] = await pool.execute(
       `SELECT id, orion_user_id, title, content, created_at 
        FROM user_templates 
        WHERE orion_user_id = ? 
        ORDER BY created_at DESC`,
-      [req.user.orion_user_id]
+      [userId]
     );
-
+    
     res.json({ templates });
   } catch (err) {
     console.error('❌ Error obteniendo plantillas:', err);
@@ -452,35 +447,24 @@ app.get('/templates', async (req, res) => {
   }
 });
 
-
 // Crear una nueva plantilla
 app.post('/templates', async (req, res) => {
-  console.log('📌 Sesión:', req.session);
-  console.log('📌 Usuario:', req.user);
-  console.log('📌 Sesión completa:', req.session);
-  console.log('📌 Usuario completo:', req.user);
-  console.log('📌 orion_user_id:', req.user?.orion_user_id);
-  if (!req.user || !req.user.orion_user_id) {
-    return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
-  }
-
-  const { title, content } = req.body;
-
-  if (!title || !content) {
+  const { user_id, title, content } = req.body;
+  
+  if (!user_id || !title || !content) {
     return res.status(400).json({ error: 'Faltan datos requeridos' });
   }
-
+  
   try {
     const [result] = await pool.execute(
       `INSERT INTO user_templates (orion_user_id, title, content, created_at) 
        VALUES (?, ?, ?, NOW())`,
-      [req.user.orion_user_id, title, content]
+      [user_id, title, content]
     );
-
+    
     res.status(201).json({
       success: true,
-      template_id: result.insertId,
-      message: 'Plantilla creada exitosamente'
+      template_id: result.insertId
     });
   } catch (err) {
     console.error('❌ Error creando plantilla:', err);
@@ -490,41 +474,30 @@ app.post('/templates', async (req, res) => {
 
 
 // Actualizar una plantilla existente
-// Actualizar una plantilla existente
 app.put('/templates', async (req, res) => {
-  if (!req.user || !req.user.orion_user_id) {
-    return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
-  }
-
-  const { id, title, content } = req.body;
-
-  if (!id || !title || !content) {
+  const { id, user_id, title, content } = req.body;
+  
+  if (!id || !user_id || !title || !content) {
     return res.status(400).json({ error: 'Faltan datos requeridos' });
   }
-
+  
   try {
-    // Verificar que la plantilla pertenezca al usuario autenticado
+    // Verificar que la plantilla pertenezca al usuario
     const [templates] = await pool.execute(
       `SELECT id FROM user_templates WHERE id = ? AND orion_user_id = ?`,
-      [id, req.user.orion_user_id]
+      [id, user_id]
     );
-
+    
     if (templates.length === 0) {
       return res.status(403).json({ error: 'No tienes permiso para editar esta plantilla' });
     }
-
-    // Actualizar la plantilla
+    
     await pool.execute(
-      `UPDATE user_templates 
-       SET title = ?, content = ?
-       WHERE id = ? AND orion_user_id = ?`,
-      [title, content, id, req.user.orion_user_id]
+      `UPDATE user_templates SET title = ?, content = ? WHERE id = ? AND orion_user_id = ?`,
+      [title, content, id, user_id]
     );
-
-    res.json({
-      success: true,
-      message: 'Plantilla actualizada exitosamente'
-    });
+    
+    res.json({ success: true });
   } catch (err) {
     console.error('❌ Error actualizando plantilla:', err);
     res.status(500).json({ error: 'Error al actualizar la plantilla' });
@@ -535,30 +508,23 @@ app.put('/templates', async (req, res) => {
 // Eliminar una plantilla
 app.delete('/templates/:id', async (req, res) => {
   const templateId = req.params.id;
-
-  if (!req.user || !req.user.orion_user_id) {
-    return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
+  const { user_id } = req.query; // Recibir user_id por query
+  
+  if (!user_id) {
+    return res.status(400).json({ error: 'user_id requerido' });
   }
-
+  
   try {
-    const [templates] = await pool.execute(
-      `SELECT id FROM user_templates WHERE id = ? AND orion_user_id = ?`,
-      [templateId, req.user.orion_user_id]
+    const [result] = await pool.execute(
+      `DELETE FROM user_templates WHERE id = ? AND orion_user_id = ?`,
+      [templateId, user_id]
     );
-
-    if (templates.length === 0) {
+    
+    if (result.affectedRows === 0) {
       return res.status(403).json({ error: 'No tienes permiso para eliminar esta plantilla' });
     }
-
-    await pool.execute(
-      `DELETE FROM user_templates WHERE id = ?`,
-      [templateId]
-    );
-
-    res.json({
-      success: true,
-      message: 'Plantilla eliminada exitosamente'
-    });
+    
+    res.json({ success: true });
   } catch (err) {
     console.error('❌ Error eliminando plantilla:', err);
     res.status(500).json({ error: 'Error al eliminar la plantilla' });
