@@ -40,12 +40,14 @@ app.set('trust proxy', 1);
 app.use(session({
   key: 'orion.sid',
   secret: process.env.SESSION_SECRET || 'clave_segura',
-  store: sessionStore,        // <-- usar MySQLStore en lugar de MemoryStore
+  store: sessionStore,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,            // true si usas HTTPS en producción
-    maxAge: 1000 * 60 * 60 * 24 * 7 // 7 días
+    secure: false,
+    httpOnly: true,      // 👈 Agregar esto por seguridad
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+    sameSite: 'lax'      // 👈 Agregar esto para CORS
   }
 }));
 
@@ -358,6 +360,9 @@ app.post('/log', async (req, res) => {
 
 // Obtener las plantillas del usuario
 app.get('/templates', async (req, res) => {
+  console.log('🔍 GET /templates - req.user:', req.user);
+  console.log('🔍 GET /templates - session:', req.session);
+  
   if (!req.user || !req.user.orion_user_id) {
     return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
   }
