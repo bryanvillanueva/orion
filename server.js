@@ -68,9 +68,15 @@ passport.serializeUser((user, done) => {
   console.log('📝 SERIALIZANDO usuario:', user);
   done(null, user);
 });
+
 passport.deserializeUser(async (user, done) => {
   try {
     console.log("🔍 DESERIALIZANDO usuario recibido:", user);
+    
+    if (!user || !user.id) {
+      console.log("❌ Usuario inválido para deserializar");
+      return done(null, false);
+    }
 
     const [rows] = await pool.execute(
       `SELECT u.id, u.email, u.orion_user_id, u.created_at, u.last_login,
@@ -81,19 +87,19 @@ passport.deserializeUser(async (user, done) => {
       [user.id]
     );
 
-    console.log("🔍 RESULTADO de la query:", rows);
+    console.log("🔍 RESULTADO query deserialización:", rows);
 
     if (rows.length === 0) {
-      console.log("⚠️ No se encontró el usuario en la base de datos.");
+      console.log("⚠️ Usuario no encontrado en BD");
       return done(null, false);
     }
 
     const userData = {
       ...rows[0],
-      name: user.name // Mantener el nombre de Google
+      name: user.name
     };
 
-    console.log("✅ Usuario deserializado exitosamente:", userData);
+    console.log("✅ Usuario deserializado:", userData);
     return done(null, userData);
   } catch (err) {
     console.error("❌ Error en deserializeUser:", err);
@@ -197,11 +203,15 @@ app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   async (req, res) => {
     console.log('🔍 CALLBACK - req.user inicial:', req.user);
-    console.log('🔍 CALLBACK - req.session antes:', req.session);
+    console.log('🔍 CALLBACK - req.session ANTES:', req.session);
+    console.log('🔍 CALLBACK - req.isAuthenticated():', req.isAuthenticated());
+    
     try {
       const googleId = req.user.id;
       const email = req.user.email;
       const name = req.user.name;
+
+      console.log('🔍 CALLBACK - Datos de Google:', { googleId, email, name });
 
       // Buscar si la cuenta ya está registrada
       const [userRows] = await pool.execute(
@@ -237,8 +247,9 @@ app.get('/auth/google/callback',
 
       const needsSetup = !orionUserId;
 
+
+      console.log('🔍 CALLBACK - req.session DESPUÉS:', req.session);
       console.log('🔍 CALLBACK - userObject final:', userObject);
-      console.log('🔍 CALLBACK - req.session después:', req.session);
 
       // Enviar los datos al frontend (popup.html) usando postMessage
       res.send(`
@@ -260,7 +271,7 @@ app.get('/auth/google/callback',
         </html>
       `);
     } catch (err) {
-      console.error("❌ Error en /auth/google/callback:", err);
+      console.error("❌ Error en callback:", err);
       res.status(500).send("Error al autenticar usuario.");
     }
   }
