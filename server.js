@@ -186,10 +186,19 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Endpoint para generar respuesta
 app.post('/generate', async (req, res) => {
   try {
-    const { type, text, userInstruction } = req.body;
-    if (!text || !type) return res.status(400).json({ error: 'Faltan datos requeridos.' });
+    const { type, text, userInstruction, orion_user_id } = req.body; // Agregar orion_user_id
+    
+    // Validar datos requeridos
+    if (!text || !type) {
+      return res.status(400).json({ error: 'Faltan datos requeridos: text y type' });
+    }
+    
+    if (!orion_user_id) {
+      return res.status(400).json({ error: 'orion_user_id es requerido' });
+    }
 
     const prompt = buildPrompt(type, text, userInstruction);
     const completion = await openai.chat.completions.create({
@@ -206,14 +215,12 @@ app.post('/generate', async (req, res) => {
 
     const result = completion.choices[0].message.content;
 
-    // Registrar log si tenemos orion_user_id
-    if (orion_user_id) {
-      await logUserActivity(orion_user_id, type, {
-        inputText: text,
-        outputText: result,
-        sourceUrl: req.headers.referer || null
-      });
-    }
+    // SIEMPRE registrar log (ahora orion_user_id es requerido)
+    await logUserActivity(orion_user_id, type, {
+      inputText: text,
+      outputText: result,
+      sourceUrl: req.headers.referer || null
+    });
 
     res.json({ result });
 
@@ -222,6 +229,7 @@ app.post('/generate', async (req, res) => {
     res.status(500).json({ error: 'Error generando respuesta' });
   }
 });
+
 
 // OAuth: login con Google
 app.get('/auth/google', passport.authenticate('google', {
