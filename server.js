@@ -63,12 +63,14 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Configurar Passport con Google
 passport.serializeUser((user, done) => done(null, user));
+
 passport.deserializeUser(async (user, done) => {
   try {
-    console.log("🔍 Deserializando usuario:", user); // 👈 esto es importante
+    console.log("🔍 Deserializando usuario:", user);
 
     const [rows] = await pool.execute(
-      `SELECT u.*, o.full_name, o.username, o.email_contact
+      `SELECT u.id, u.email, u.orion_user_id, u.created_at, u.last_login,
+              o.full_name, o.username, o.email_contact
        FROM users u
        LEFT JOIN orion_users o ON u.orion_user_id = o.id
        WHERE u.id = ? LIMIT 1`,
@@ -80,8 +82,13 @@ passport.deserializeUser(async (user, done) => {
       return done(null, false);
     }
 
-    console.log("✅ Usuario deserializado:", rows[0]);
-    return done(null, rows[0]);
+    const userData = {
+      ...rows[0],
+      name: user.name // Mantener el nombre de Google
+    };
+
+    console.log("✅ Usuario deserializado:", userData);
+    return done(null, userData);
   } catch (err) {
     console.error("❌ Error en deserializeUser:", err);
     return done(err, null);
@@ -376,6 +383,9 @@ app.get('/templates', async (req, res) => {
 app.post('/templates', async (req, res) => {
   console.log('📌 Sesión:', req.session);
   console.log('📌 Usuario:', req.user);
+  console.log('📌 Sesión completa:', req.session);
+  console.log('📌 Usuario completo:', req.user);
+  console.log('📌 orion_user_id:', req.user?.orion_user_id);
   if (!req.user || !req.user.orion_user_id) {
     return res.status(401).json({ error: 'No autenticado o sin perfil completo' });
   }
@@ -481,8 +491,32 @@ app.delete('/templates/:id', async (req, res) => {
   }
 });
 
+// Debuggind Endpoint
 
-
+app.get('/debug-user', async (req, res) => {
+  if (!req.user) {
+    return res.json({ error: 'No hay usuario en sesión' });
+  }
+  
+  try {
+    // Buscar manualmente el usuario
+    const [userRows] = await pool.execute(
+      `SELECT u.*, o.full_name, o.username, o.email_contact
+       FROM users u
+       LEFT JOIN orion_users o ON u.orion_user_id = o.id
+       WHERE u.id = ? LIMIT 1`,
+      [req.user.id]
+    );
+    
+    res.json({
+      sessionUser: req.user,
+      dbUser: userRows[0] || null,
+      hasOrionId: !!req.user.orion_user_id
+    });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
 
 app.listen(port, () => {
   console.log(`🚀 Orion backend corriendo en puerto ${port}`);
