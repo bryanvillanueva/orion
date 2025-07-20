@@ -54,16 +54,27 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+app.use((req, res, next) => {
+  // Permitir cualquier origen para las peticiones de extensiones
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Responder a peticiones OPTIONS (preflight)
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
+// Mantener también tu configuración de CORS actual como respaldo:
 app.use(cors({
-  origin: [
-    'chrome-extension://*',  
-    'https://orion-production-5768.up.railway.app',
-    'http://localhost:3000',
-    'http://localhost:8080'
-  ],
+  origin: true,  // Permitir cualquier origen
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(bodyParser.json());
@@ -395,8 +406,29 @@ app.post('/log', async (req, res) => {
 
 // ENDPOINTS PARA GESTIÓN DE PLANTILLAS
 
+// Manejo específico de OPTIONS para templates
+app.options('/templates', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.sendStatus(200);
+});
+
+app.options('/templates/:id', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.sendStatus(200);
+});
+
 // Obtener las plantillas del usuario
 app.get('/templates', async (req, res) => {
+  console.log('🔍 Headers recibidos:', req.headers);
+  console.log('🔍 Cookie header:', req.headers.cookie);
+  console.log('🔍 Origin:', req.headers.origin);
+  console.log('🔍 User-Agent:', req.headers['user-agent']);
   console.log('🔍 GET /templates - req.user:', req.user);
   console.log('🔍 GET /templates - session:', req.session);
   
