@@ -195,16 +195,26 @@ app.post('/generate', async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4.1-mini',
       messages: [
-        { role: 'system', content: 'Eres un asistente profesional especializado en comunicación empresarial.' },
+        { role: 'system', content: 'Eres un asistente especializado en redactar respuestas de correo empresarial.\n\nREGLAS GENERALES\n• Detecta el idioma del correo de entrada; responde en ese mismo idioma,\n  salvo que userInstruction indique otro.\n• Detecta el nombre o nombres del/los remitente(s) en el correo original:\n    – Si hay un solo nombre, inicia el saludo con él (p. ej., "Estimado Juan,").\n    – Si hay varios nombres, inclúyelos a todos ("Estimadas Ana y Luisa,").\n    – Si no se identifican nombres, usa un saludo genérico apropiado al idioma.\n• Si `userInstruction` especifica tono, extensión o puntos a tratar, síguelos.\n  Si `userInstruction` está vacío, aplica un tono profesional cordial.\n• No incluyas llamadas a la acción específicas (CTA) a menos que la instrucción\n  lo pida explícitamente.\n• No hagas preguntas de seguimiento ni indiques que faltan datos; genera la\n  mejor respuesta posible con la información disponible.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 500,
+      max_tokens: 800,
       presence_penalty: 0.1,
       frequency_penalty: 0.1
     });
 
     const result = completion.choices[0].message.content;
+
+    // Registrar log si tenemos orion_user_id
+    if (orion_user_id) {
+      await logUserActivity(orion_user_id, type, {
+        inputText: text,
+        outputText: result,
+        sourceUrl: req.headers.referer || null
+      });
+    }
+
     res.json({ result });
 
   } catch (err) {
@@ -448,10 +458,13 @@ app.get('/templates', async (req, res) => {
 });
 
 // Crear una nueva plantilla
+// POST /templates - Crear plantilla
 app.post('/templates', async (req, res) => {
-  const { user_id, title, content } = req.body;
+  const { user_id, title, content } = req.body; // user_id es el orion_user_id
   
-  if (!user_id || !title || !content) {
+  const userIdNum = parseInt(user_id);
+  
+  if (!userIdNum || isNaN(userIdNum) || !title || !content) {
     return res.status(400).json({ error: 'Faltan datos requeridos' });
   }
   
@@ -459,8 +472,14 @@ app.post('/templates', async (req, res) => {
     const [result] = await pool.execute(
       `INSERT INTO user_templates (orion_user_id, title, content, created_at) 
        VALUES (?, ?, ?, NOW())`,
-      [user_id, title, content]
+      [userIdNum, title, content]
     );
+    
+    // Registrar log
+    await logUserActivity(userIdNum, 'CREATE_TEMPLATE', {
+      inputText: `Título: ${title}\nContenido: ${content}`,
+      sourceUrl: null
+    });
     
     res.status(201).json({
       success: true,
@@ -472,8 +491,7 @@ app.post('/templates', async (req, res) => {
   }
 });
 
-
-// Actualizar una plantilla existente
+// PUT /templates - Editar plantilla
 app.put('/templates', async (req, res) => {
   const { id, user_id, title, content } = req.body;
   
@@ -497,6 +515,12 @@ app.put('/templates', async (req, res) => {
       [title, content, id, user_id]
     );
     
+    // Registrar log
+    await logUserActivity(user_id, 'EDIT_TEMPLATE', {
+      inputText: `ID: ${id}\nTítulo: ${title}\nContenido: ${content}`,
+      sourceUrl: null
+    });
+    
     res.json({ success: true });
   } catch (err) {
     console.error('❌ Error actualizando plantilla:', err);
@@ -504,11 +528,10 @@ app.put('/templates', async (req, res) => {
   }
 });
 
-
-// Eliminar una plantilla
+// DELETE /templates/:id - Eliminar plantilla
 app.delete('/templates/:id', async (req, res) => {
   const templateId = req.params.id;
-  const { user_id } = req.query; // Recibir user_id por query
+  const { user_id } = req.query;
   
   if (!user_id) {
     return res.status(400).json({ error: 'user_id requerido' });
@@ -524,6 +547,12 @@ app.delete('/templates/:id', async (req, res) => {
       return res.status(403).json({ error: 'No tienes permiso para eliminar esta plantilla' });
     }
     
+    // Registrar log
+    await logUserActivity(user_id, 'DELETE_TEMPLATE', {
+      inputText: `Template ID: ${templateId}`,
+      sourceUrl: null
+    });
+    
     res.json({ success: true });
   } catch (err) {
     console.error('❌ Error eliminando plantilla:', err);
@@ -531,31 +560,53 @@ app.delete('/templates/:id', async (req, res) => {
   }
 });
 
-// Debuggind Endpoint
 
-app.get('/debug-user', async (req, res) => {
-  if (!req.user) {
-    return res.json({ error: 'No hay usuario en sesión' });
-  }
-  
+// LOG SECTION // 
+
+async function logUserActivity(orionUserId, actionType, data = {}) {
   try {
-    // Buscar manualmente el usuario
-    const [userRows] = await pool.execute(
-      `SELECT u.*, o.full_name, o.username, o.email_contact
-       FROM users u
-       LEFT JOIN orion_users o ON u.orion_user_id = o.id
-       WHERE u.id = ? LIMIT 1`,
-      [req.user.id]
+    const {
+      inputText = null,
+      outputText = null,
+      sourceUrl = null,
+      userId = null // Para el user_id de Google si lo necesitas
+    } = data;
+    
+    await pool.execute(
+      `INSERT INTO user_activity_logs (orion_user_id, user_id, action_type, input_text, output_text, source_url, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [orionUserId, userId, actionType, inputText, outputText, sourceUrl]
     );
     
-    res.json({
-      sessionUser: req.user,
-      dbUser: userRows[0] || null,
-      hasOrionId: !!req.user.orion_user_id
-    });
+    console.log(`📊 Log registrado: ${actionType} para orion_user_id ${orionUserId}`);
   } catch (err) {
-    res.json({ error: err.message });
+    console.error('❌ Error registrando log:', err);
   }
+}
+
+// Endpoint para logs desde el frontend
+app.post('/log', async (req, res) => {
+  const { 
+    orion_user_id, 
+    user_id,     
+    action_type, 
+    input_text, 
+    output_text, 
+    source_url
+  } = req.body;
+  
+  if (!orion_user_id || !action_type) {
+    return res.status(400).json({ error: 'orion_user_id y action_type son requeridos' });
+  }
+  
+  await logUserActivity(orion_user_id, action_type, {
+    inputText: input_text,
+    outputText: output_text,
+    sourceUrl: source_url,
+    userId: user_id
+  });
+  
+  res.json({ success: true });
 });
 
 app.listen(port, () => {
