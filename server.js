@@ -155,8 +155,8 @@ const limiter = rateLimit({
 });
 app.use('/generate', limiter);
 
-// Prompt builder
-function buildPrompt(type, text, userInstruction) {
+/// Prompt builder - MODIFICADA
+function buildPrompt(type, text, userInstruction, templateContent = null) {
   const instructions = userInstruction ? `\nInstrucciones adicionales: ${userInstruction}` : '';
 
   switch (type) {
@@ -171,11 +171,23 @@ function buildPrompt(type, text, userInstruction) {
       return `Mejora el siguiente texto corrigiendo errores y puliendo el estilo:\n\n"${text}"\n\nInstrucciones:\n- Corrige errores gramaticales y ortográficos\n- Mejora la fluidez y coherencia\n- Mantén el tono original\n- No cambies el significado${instructions}`;
     case 'template':
       return `Genera una respuesta usando esta plantilla profesional:\n\nContexto: "${text}"\n\nCrea una respuesta estructurada que incluya:\n1. Saludo apropiado\n2. Reconocimiento del mensaje\n3. Respuesta a los puntos principales\n4. Cierre cordial${instructions}`;
+    case 'use_template':
+      return `Usa esta plantilla como base y mejórala con el contexto proporcionado:
+
+PLANTILLA BASE:
+"${templateContent}"
+
+CONTEXTO DEL MENSAJE:
+"${text}"
+
+INSTRUCCIONES ADICIONALES:
+${userInstruction}
+
+Combina la estructura de la plantilla con el contexto específico del mensaje. Mejora y personaliza la respuesta manteniendo el formato profesional. Reemplaza cualquier placeholder con información relevante del contexto.`;
     default:
       return `Como asistente profesional, ayuda con lo siguiente:\n\n"${text}"${instructions}`;
   }
 }
-
 // Endpoints
 
 app.get('/health', (req, res) => {
@@ -189,7 +201,7 @@ app.get('/health', (req, res) => {
 // Endpoint para generar respuesta
 app.post('/generate', async (req, res) => {
   try {
-    const { type, text, userInstruction, orion_user_id } = req.body; // Agregar orion_user_id
+    const { type, text, userInstruction, orion_user_id, templateContent } = req.body; // Agregar templateContent
     
     // Validar datos requeridos
     if (!text || !type) {
@@ -200,7 +212,7 @@ app.post('/generate', async (req, res) => {
       return res.status(400).json({ error: 'orion_user_id es requerido' });
     }
 
-    const prompt = buildPrompt(type, text, userInstruction);
+    const prompt = buildPrompt(type, text, userInstruction, templateContent); // Pasar templateContent
     const completion = await openai.chat.completions.create({
       model: 'gpt-4.1-mini',
       messages: [
